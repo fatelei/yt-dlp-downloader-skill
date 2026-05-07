@@ -13,6 +13,29 @@
 
 set -e
 
+print_usage() {
+    head -15 "$0" | tail -13
+}
+
+validate_url() {
+    local url="$1"
+
+    if [[ ! "$url" =~ ^https?:// ]]; then
+        echo "Error: URL must start with http:// or https://"
+        exit 1
+    fi
+
+    if [[ "$url" =~ [[:space:]] ]]; then
+        echo "Error: URL must not contain whitespace"
+        exit 1
+    fi
+
+    if [[ "$url" =~ [\'\"\`\;\<\>\\] ]]; then
+        echo "Error: URL contains unsupported characters"
+        exit 1
+    fi
+}
+
 # Default values
 DOWNLOAD_PATH="${HOME}/Downloads/yt-dlp"
 AUDIO_ONLY=false
@@ -49,7 +72,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            head -15 "$0" | tail -13
+            print_usage
             exit 0
             ;;
         *)
@@ -65,6 +88,8 @@ if [[ -z "$URL" ]]; then
     echo "Usage: $0 [options] URL"
     exit 1
 fi
+
+validate_url "$URL"
 
 # Check dependencies
 if ! command -v yt-dlp &> /dev/null; then
@@ -82,14 +107,19 @@ fi
 # Create download directory
 mkdir -p "$DOWNLOAD_PATH"
 
-# Build command
-CMD="yt-dlp -P \"$DOWNLOAD_PATH\""
+if [[ -n "$QUALITY" && ! "$QUALITY" =~ ^[0-9]+$ ]]; then
+    echo "Error: Quality must be a numeric height such as 720 or 1080"
+    exit 1
+fi
+
+# Build command as an argument array to avoid shell injection.
+CMD=(yt-dlp -P "$DOWNLOAD_PATH")
 
 # Add format selection
 if [[ -n "$FORMAT_ID" ]]; then
-    CMD="$CMD -f \"$FORMAT_ID\""
+    CMD+=(-f "$FORMAT_ID")
 elif [[ -n "$QUALITY" ]]; then
-    CMD="$CMD -f \"bestvideo[height<=$QUALITY]+bestaudio/best[height<=$QUALITY]\""
+    CMD+=(-f "bestvideo[height<=$QUALITY]+bestaudio/best[height<=$QUALITY]")
 fi
 
 # Audio extraction
@@ -98,22 +128,22 @@ if [[ "$AUDIO_ONLY" == true ]]; then
         echo "Warning: ffmpeg not found. Audio extraction may fail."
         echo "Install with: brew install ffmpeg"
     fi
-    CMD="$CMD -x --audio-format mp3"
+    CMD+=(-x --audio-format mp3)
 fi
 
 # Subtitles
 if [[ "$DOWNLOAD_SUBS" == true ]]; then
-    CMD="$CMD --write-subs --sub-langs all"
+    CMD+=(--write-subs --sub-langs all)
 fi
 
 # Add URL
-CMD="$CMD \"$URL\""
+CMD+=("$URL")
 
 # Execute
-echo "Executing: $CMD"
-echo "Download path: $DOWNLOAD_PATH"
-echo ""
-eval $CMD
+printf "Executing:"
+printf " %q" "${CMD[@]}"
+printf "\nDownload path: %s\n\n" "$DOWNLOAD_PATH"
+"${CMD[@]}"
 
 echo ""
 echo "Download complete! Files saved to: $DOWNLOAD_PATH"

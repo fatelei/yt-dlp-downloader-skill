@@ -128,6 +128,8 @@ When user provides a video URL:
    - Specific quality?
 
 3. **Construct the command** based on requirements
+   - Accept only `http://` or `https://` URLs
+   - Do not build shell from untrusted text or use `eval`
 
 4. **Execute the download** using Shell tool with `required_permissions: ["all", "network"]`
 
